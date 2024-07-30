@@ -1,18 +1,16 @@
 package main
 
 import (
-	"fmt"
+	api "ClyMQ/kitex_gen/api/operations"
 	"log"
-	"github.com/ylx/mq/server"
-	"github.com/ylx/mq/web"
 )
 
 func main() {
-	s := web.NewServer(&server.InMemory{})
-	log.Printf("Listening connections")
+	svr := api.NewServer(new(OperationsImpl))//创建一个rpc服务
 
-	err := s.Serve()
+	err := svr.Run()//运行rpc
+
 	if err != nil {
-		fmt.Printf(err.Error())
+		log.Println(err.Error())
 	}
 }
