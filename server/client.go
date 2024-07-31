@@ -1,6 +1,6 @@
 package server
 
-//消息队列sever端对于消费者的操作
+//S ——> C
 import (
 	"mq/kitex_gen/api"
 	"mq/kitex_gen/api/client_operations"
@@ -23,10 +23,11 @@ type Client struct{
 	state string
 }
 
+//消息组结构
 type Group struct{
 	rmu sync.RWMutex
-	topic_name string
-	consumers map[string]bool // map[client'name]alive
+	topic_name string			// 组所属的主题名称
+	consumers map[string]bool  	// 消费者映射，键为消费者名称，值为布尔值表示消费者是否存活
 }
 
 func NewClient(ipport string, con client_operations.Client) *Client{
@@ -35,7 +36,7 @@ func NewClient(ipport string, con client_operations.Client) *Client{
 		name: ipport,
 		consumer: con,
 		state: ALIVE,
-		subList: make([]*SubScription, 0),
+		subList: make([]*SubScription, 0),//初始化订阅列表
 	}
 	return client
 }
@@ -93,6 +94,7 @@ func (c *Client)CheckConsumer() bool { //心跳检测
 	return true
 }
 
+//将一个订阅结构插入消费者的订阅列表中
 func (c *Client)AddSubScription(sub *SubScription){
 	c.mu.Lock()
 	c.subList = append(c.subList, sub)

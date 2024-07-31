@@ -1,5 +1,7 @@
 package server
 
+//C ——> S
+
 import (
 	"mq/kitex_gen/api"
 	"mq/kitex_gen/api/server_operations"
@@ -24,7 +26,7 @@ type RPCServer struct {
 func (s *RPCServer) Start(opts []server.Option) error {
 	svr := server_operations.NewServer(s, opts...)//创建一个rpc的服务端
 
-	s.server.make()//初始化
+	s.server.make()//初始化Server结构体
 	
 	go func() {//启动一个rpc的服务线程
 		err := svr.Run()
@@ -36,6 +38,7 @@ func (s *RPCServer) Start(opts []server.Option) error {
 	return nil
 }
 
+//消息队列通过rpc向客户端提供的推送接口
 func (s *RPCServer) Push(ctx context.Context, req *api.PushRequest) (resp *api.PushResponse, err error) {
 	fmt.Println(req)
 	

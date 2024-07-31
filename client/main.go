@@ -17,6 +17,7 @@ type Server struct{
 
 }
 
+//消费者通过rpc为消息队列提供的接口，s端主动向c端发起的操作
 func (s *Server)Pub(ctx context.Context, req *api.PubRequest)(resp *api.PubResponse, err error){
 	fmt.Println(req.Meg)
 	return &api.PubResponse{Ret: true}, nil
@@ -49,10 +50,10 @@ func start_server(port string) {
 
 func main() {
 	
-	//启动一个服务器
+	//连接一个rpc服务器
 	go start_server(":8889")
 
-	//connection the broker server for push/pull/info
+	//与消息队列的服务端建立连接
 	client, err := server_operations.NewClient("client", client2.WithHostPorts("0.0.0.0:8888"))
 	if err != nil {
 		fmt.Println(err)

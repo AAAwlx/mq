@@ -11,25 +11,31 @@ const (
 	TOPIC_KEY_PSB = 3 //map[cli_name]offset in a partition
 )
 
+//主题结构
 type Topic struct {
 	rmu     sync.RWMutex
 	Parts   map[string]*Partition
-	subList map[string]*SubScription
+	subList map[string]*SubScription//订阅名——订阅结构
 }
+
+//消息分区
 type Partition struct {
 	rmu              sync.RWMutex
 	key              string
 	queue            []string
 	consumers_offset map[string]int
 }
+//订阅结构
 type SubScription struct {
-	rmu              sync.RWMutex
-	topic_name       string
-	option           int8
-	consumer_to_part map[string]string //consumer to partition
-	groups           []*Group
+	rmu              sync.RWMutex        
+	topic_name       string             // 订阅的主题名称
+	option           int8               // 订阅的选项，用于确定订阅的类型或模式
+	consumer_to_part map[string]string  // 消费者到分区的映射，键为消费者 ID，值为对应的分区键
+	groups           []*Group           // 组的切片，包含所有与此订阅关联的组
 }
 
+
+//关闭消费者链接
 func (s *SubScription) ShutdownConsumer(cli_name string) {
 	s.rmu.Lock()
 
@@ -54,8 +60,8 @@ func (s *SubScription) AddConsumer(req sub) {
 		s.groups[0].AddClient(req.consumer)
 	case TOPIC_KEY_PSB:
 		group := NewGroup(req.topic, req.consumer)
-		s.groups = append(s.groups, group)
-		s.consumer_to_part[req.consumer] = req.key
+		s.groups = append(s.groups, group)//向消费组中添加消费者
+		s.consumer_to_part[req.consumer] = req.key// 将消费者和分片键的映射添加到 consumer_to_part 映射中
 	}
 }
 
@@ -90,11 +96,12 @@ func (t *Topic) getStringfromSub(req sub) string {
 	return ret
 }
 
+//根据消费者的订阅请求将
 func (t *Topic) AddSubScription(req sub) (retsub *SubScription, err error){
 	ret := t.getStringfromSub(req)
 
 	subscription, ok := t.subList[ret]
-	if !ok {
+	if !ok {//如果没有该订阅则创建一个
 		subscription = NewSubScription(req)
 	} else {
 		subscription.AddConsumer(req)
@@ -144,6 +151,7 @@ func (p *Partition) Release(server *Server) {
 	}
 }
 
+//发布消息
 func (p *Partition)Pub(cli *Client){
 
 	for{
