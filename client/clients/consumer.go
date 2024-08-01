@@ -1,4 +1,4 @@
-package client
+package clients
 
 import (
 	"mq/kitex_gen/api"
@@ -12,7 +12,18 @@ import (
 )
 
 type Consumer struct {
-	Cli server_operations.Client
+	Cli  server_operations.Client   //连接多个broker
+	Name string
+
+	Topic_Partions map[string]Info
+}
+
+type Info struct {
+	offset int64
+	topic  string
+	part   string
+	// Cli    server_operations.Client  
+	buffer []string
 }
 
 //消费者通过rpc为消息队列提供的接口，s端主动向c端发起的操作
@@ -36,5 +47,28 @@ func (c *Consumer) Start_server(port string) {
 	err := svr.Run()
 	if err != nil {
 		println(err.Error())
+	}
+}
+
+func (c *Consumer) StartGet() (err error) {
+
+	ret := ""
+	for tp_name, info := range c.Topic_Partions {
+		req := api.InfoGetRequest{
+			CliName: c.Name,
+			TopicName: info.topic,
+			PartName: info.part,
+			Offset: info.offset,
+		}
+		resp, err := c.Cli.StarttoGet(context.Background(), &req)
+		if err != nil || !resp.Ret{
+			ret += tp_name + ": err != nil or resp.Ret == false\n"
+		}
+	}
+
+	if ret == ""{
+		return nil
+	}else{
+		return errors.New(ret)
 	}
 }

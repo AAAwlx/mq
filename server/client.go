@@ -7,6 +7,7 @@ import (
 	"context"
 	"sync"
 	"time"
+	"errors"
 )
 
 const (
@@ -50,15 +51,39 @@ func NewGroup(topic_name, cli_name string)*Group{
 	return group
 }
 
-func (g *Group)AddClient(cli_name string){
+// RecoverClient 检查并恢复一个客户端的状态
+func (g *Group)RecoverClient(cli_name string) error {
 	g.rmu.Lock()
+	defer g.rmu.Unlock()
+
 	_, ok := g.consumers[cli_name]
 	if ok {
-		g.consumers[cli_name] = true
-	}
-	g.rmu.Unlock()
+		if g.consumers[cli_name] {
+			return errors.New("This client is alive before")
+		}else{
+			g.consumers[cli_name] = true
+			return nil
+		}
+		return nil
+	}else{
+		return errors.New("Do not have this client")
+	}	
 }
 
+//向消费组中添加一个消费者
+func (g *Group)AddClient(cli_name string) error {
+	g.rmu.Lock()
+	defer g.rmu.Unlock()
+	_, ok := g.consumers[cli_name]
+	if ok {
+		return errors.New("this client has in this group")
+	}else{
+		g.consumers[cli_name] = true
+		return nil
+	}
+}
+
+//消费者下线
 func (g *Group)DownClient(cli_name string){
 	g.rmu.Lock()
 	_, ok := g.consumers[cli_name]
@@ -68,6 +93,7 @@ func (g *Group)DownClient(cli_name string){
 	g.rmu.Unlock()
 }
 
+//将组内的消费者删除
 func (g *Group)DeleteClient(cli_name string){
 	g.rmu.Lock()
 	_, ok := g.consumers[cli_name]
@@ -98,6 +124,13 @@ func (c *Client)CheckConsumer() bool { //心跳检测
 func (c *Client)AddSubScription(sub *SubScription){
 	c.mu.Lock()
 	c.subList = append(c.subList, sub)
+	c.mu.Unlock()
+}
+
+//删除该订阅结构
+func (c *Client)ReduceSubScription(name string){
+	c.mu.Lock()
+	delete(c.subList, name)
 	c.mu.Unlock()
 }
 

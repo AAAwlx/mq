@@ -129,7 +129,7 @@ func (s *Server) addMessage(topic *Topic, req push) error {
 
 		go part.Release(s)  //创建新分片后，开启协程发送消息
 
-		topic.Parts[req.key] = part
+		topic.Parts[req.key] = part//根据请求体中的key获取分区信息
 	}else{
 		part.rmu.Lock()
 		part.queue = append(part.queue, req.message)
