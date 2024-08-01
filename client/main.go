@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"net"
 	"time"
-
+	client3 "mq/client/client"
 	client2 "github.com/cloudwego/kitex/client"
 	"github.com/cloudwego/kitex/server"
 )
@@ -49,6 +49,7 @@ func start_server(port string) {
 }
 
 func main() {
+	consumer := client3.Consumer{}
 	
 	//连接一个rpc服务器
 	go start_server(":8889")
@@ -58,8 +59,8 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 	}
+	consumer.Cli = client
 
-	//send ip and port for brokerserver can pub this client
 	info := &api.InfoRequest{
 		IpPort: "0.0.0.0:8889",
 	}

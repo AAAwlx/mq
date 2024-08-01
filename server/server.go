@@ -21,6 +21,7 @@ type Server struct {
 }
 
 //客户端的请求结构体
+//推送请求
 type push struct {
 	producer int64
 	topic    string
@@ -28,16 +29,19 @@ type push struct {
 	message  string
 }
 
+//拉取请求
 type pull struct {
 	consumer int64
 	topic    string
 	key      string
 }
 
+//拉取请求的响应
 type retpull struct{
 	message string
 }
 
+//订阅
 type sub struct{
 	consumer string
 	topic string
@@ -139,12 +143,12 @@ func (s *Server) addMessage(topic *Topic, req push) error {
 func (s *Server) PushHandle(req push) error {
 
 	topic, ok := s.topics[req.topic]
-	if !ok {
+	if !ok {//该节点没有主题信息
 		topic = NewTopic(req)
 		s.mu.Lock()
 		s.topics[req.topic] = topic
 		s.mu.Unlock()
-	}else{
+	}else{//有主题信息
 		s.addMessage(topic, req)
 	}
 	return nil

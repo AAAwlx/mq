@@ -31,3 +31,5 @@
 
 ## 数据持久化
 每个Partition创建一个文件，采取顺序读写的方式提高性能。
+
+![图 0](../images/0485b97e7f3f5deb643b98b72b305fe07cfa1facb150585ba8b5c4c41c2123e8.png)  

@@ -14,11 +14,11 @@ const (
 //主题结构
 type Topic struct {
 	rmu     sync.RWMutex
-	Parts   map[string]*Partition
-	subList map[string]*SubScription//订阅名——订阅结构
+	Parts   map[string]*Partition//该主题下包含的分区
+	subList map[string]*SubScription//该主题下包含的订阅信息
 }
 
-//消息分区
+//消息分片
 type Partition struct {
 	rmu              sync.RWMutex
 	key              string
@@ -69,6 +69,7 @@ func (s *SubScription) Rebalance(){
 
 }
 
+//创建一个新主题
 func NewTopic(req push) *Topic {
 	topic := &Topic{
 		rmu: sync.RWMutex{},
@@ -86,6 +87,7 @@ func NewTopic(req push) *Topic {
 // topic + "nil" + "psb" (pub and sub consumer比partition为 n : n)
 func (t *Topic) getStringfromSub(req sub) string {
 	ret := req.topic
+	// 根据订阅选项修改字符串以表示不同的消息传递模式
 	if req.option == TOPIC_NIL_PTP { // 订阅发布模式
 		ret = ret + "NIL" + "ptp" //point to point
 	} else if req.option == TOPIC_KEY_PSB {
