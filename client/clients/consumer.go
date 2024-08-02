@@ -7,7 +7,7 @@ import (
 	"context"
 	"fmt"
 	"net"
-
+	"errors"
 	"github.com/cloudwego/kitex/server"
 )
 

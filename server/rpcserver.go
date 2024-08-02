@@ -1,34 +1,32 @@
 package server
 
-//C ——> S
-
 import (
 	"mq/kitex_gen/api"
+	
 	"mq/kitex_gen/api/server_operations"
 	"context"
 	"fmt"
-	"sync"
+
 	"github.com/cloudwego/kitex/server"
 )
 
 type RPCServer struct {
 	// me int64
-	logging struct {
-		sync.RWMutex//日志
-		logger      Logger
-		trace       int32
-		debug       int32
-		traceSysAcc int32
-	}
+
 	server Server
 }
 
-func (s *RPCServer) Start(opts []server.Option) error {
-	svr := server_operations.NewServer(s, opts...)//创建一个rpc的服务端
+func NewRpcServer() RPCServer {
+	LOGinit()
+	return RPCServer{}
+}
 
-	s.server.make()//初始化Server结构体
+func (s *RPCServer) Start(opts []server.Option) error {
+	svr := server_operations.NewServer(s, opts...)
+
+	s.server.make()
 	
-	go func() {//启动一个rpc的服务线程
+	go func() {
 		err := svr.Run()
 		if err != nil {
 			fmt.Println(err.Error())
@@ -38,7 +36,6 @@ func (s *RPCServer) Start(opts []server.Option) error {
 	return nil
 }
 
-//消息队列通过rpc向客户端提供的推送接口
 func (s *RPCServer) Push(ctx context.Context, req *api.PushRequest) (resp *api.PushResponse, err error) {
 	fmt.Println(req)
 	
@@ -81,6 +78,7 @@ func (s *RPCServer) Info(ctx context.Context, req *api.InfoRequest) (resp *api.I
 	return &api.InfoResponse{Ret: false}, err;
 }
 
+//订阅
 func (s *RPCServer) Sub(ctx context.Context, req *api.SubRequest) (resp *api.SubResponse, err error) {
 
 	err = s.server.SubHandle(sub{
@@ -95,4 +93,19 @@ func (s *RPCServer) Sub(ctx context.Context, req *api.SubRequest) (resp *api.Sub
 	}
 
 	return &api.SubResponse{Ret: false}, err
+}
+
+func (s *RPCServer) StarttoGet(ctx context.Context, req *api.InfoGetRequest) (resp *api.InfoGetResponse, err error){
+	err = s.server.StartGet(startget{
+		cli_name: req.CliName,
+		topic_name: req.TopicName,
+		part_name: req.PartName,
+		offset: req.Offset,
+	})
+
+	if err == nil{
+		return &api.InfoGetResponse{Ret: true}, nil
+	}
+
+	return &api.InfoGetResponse{Ret: false}, err
 }

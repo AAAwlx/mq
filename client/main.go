@@ -9,7 +9,7 @@ import (
 	"net"
 	"time"
 	"os"
-	client3 "mq/client/client"
+	client3 "mq/client/clients"
 	client2 "github.com/cloudwego/kitex/client"
 	"github.com/cloudwego/kitex/server"
 )
@@ -68,12 +68,12 @@ func main() {
 	ipport := ""
 
 	switch option{
-	case "p":
+	case "p"://生产者
 		producer := client3.Producer{}
 		producer.Name = client3.GetIpport() + port
 		producer.Cli = client
 		ipport = producer.Name
-	case "c":	
+	case "c"://消费者
 		consumer := client3.Consumer{}
 		//start a server for pub and pinpong
 		consumer = client3.Consumer{}
