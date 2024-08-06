@@ -60,6 +60,54 @@ service Server_Operations {
     InfoGetResponse StarttoGet(1: InfoGetRequest req)
 }
 
+struct BroInfoRequest {
+    1: string broker_name
+    2: string broker_host_port
+}
+
+struct BroInfoResponse {
+    1: bool ret
+}
+
+struct ProGetBrokRequest {
+    1:  string  topic_name
+    2:  string  part_name
+}
+
+struct ProGetBrokResponse {
+    1:  bool    ret
+    2:  string  broker_host_port
+}
+
+struct ConGetBrokRequest {
+    1:  string topic_name
+    2:  string part_name
+    3:  i8 option
+}
+
+struct ConGetBrokResponse   {
+    1:  bool    ret
+    2:  i64     size
+    3:  binary  broks
+    4:  binary  parts
+}
+
+struct BroGetConfigRequest {
+    1:  binary  propertyinfo
+}
+
+struct BroGetConfigResponse {
+    1:  bool    ret
+    2:  binary  brokerinfo
+}
+
+service ZkServer_Operations {
+    BroInfoResponse BroInfo(1: BroInfoRequest req)
+    ProGetBrokResponse ProGetBroker(1:  ProGetBrokRequest req)
+    ConGetBrokResponse ConGetBroker(1:  ConGetBrokRequest req)
+    BroGetConfigResponse BroGetConfig(1:    BroGetConfigRequest req)
+}
+
 struct PubRequest{
     1: string topic_name
     2: string part_name

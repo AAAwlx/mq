@@ -2,11 +2,11 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"os"
 	"sync"
 )
-
-//持久化
 
 type File struct{
 	mu 			sync.RWMutex
@@ -18,7 +18,7 @@ func NewFile(name string) *File {
 	return &File{
 		mu: sync.RWMutex{},
 		filename: name,
-		node_size: 0,
+		node_size: NODE_SIZE,
 	}
 }
 
@@ -32,7 +32,7 @@ func (f *File) OpenFile() *os.File {
 
 func(f *File) GetIndex(file *os.File) int64 {
 	f.mu.RLock()
-	var index int64
+	// var index int64
 
 	/*
 	读取文件，获取该partition的最后一个index
@@ -40,7 +40,7 @@ func(f *File) GetIndex(file *os.File) int64 {
 
 	f.mu.RUnlock()
 
-	return index
+	return 0
 }
 
 func (f *File) WriteFile(file *os.File, node Key, msg []Message) bool {
@@ -71,6 +71,64 @@ func (f *File) WriteFile(file *os.File, node Key, msg []Message) bool {
 	}
 }
 
-func (f *File) ReadFile(file *os.File) {
+func (f *File) ReadFile(file *os.File, offset int64) (Key, []Message, error) {
+	var node Key
+	var msg []Message
+	data_node := make([]byte, NODE_SIZE)
+
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 	
+	size, err := file.ReadAt(data_node, offset)
+
+	if size != NODE_SIZE {
+		return node, msg,  errors.New("read node size is not NODE_SIZE")
+	}
+	if err == io.EOF {    //读到文件末尾
+		return node, msg, errors.New("read All file, do not find this index")
+	}
+
+	json.Unmarshal(data_node, &node)
+	data_msg := make([]byte, node.Size)
+	size, err = file.ReadAt(data_msg, offset + int64(f.node_size) + int64(node.Size) )
+
+	if size != NODE_SIZE {
+		return node, msg,  errors.New("read msg size is not NODE_SIZE")
+	}
+	if err == io.EOF {    //读到文件末尾
+		return node, msg, errors.New("read All file, do not find this index")
+	}
+
+	json.Unmarshal(data_msg, &msg)
+
+	return node, msg, nil
+}
+
+func (f *File) FindOffset(file *os.File, index int64) (int64, error){
+	var node Key
+	data_node := make([]byte, NODE_SIZE)
+
+	offset := int64(0)
+	for{
+
+		f.mu.RLock()
+		size, err := file.ReadAt(data_node, offset)
+		f.mu.RUnlock()
+
+		if size != NODE_SIZE {
+			return int64(-1),  errors.New("read node size is not NODE_SIZE")
+		}
+		if err == io.EOF {    //读到文件末尾
+			return index, errors.New("read All file, do not find this index")
+		}
+
+		json.Unmarshal(data_node, &node)
+		if node.End_index < index {
+			offset += int64(NODE_SIZE + node.Size)
+		}else{
+			break
+		}
+	}
+
+	return offset, nil
 }
