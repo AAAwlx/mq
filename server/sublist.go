@@ -67,6 +67,11 @@ func (t *Topic) GetParts() map[string]*Partition {
 	return t.Parts
 }
 
+func (t *Topic) AddPartition(req push) {
+	part, _ := NewPartition(req)
+	t.Parts[req.key] = part
+}
+
 func (t *Topic) addMessage(req push) error {
 	part, ok := t.Parts[req.key]
 	if !ok {

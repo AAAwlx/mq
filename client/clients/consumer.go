@@ -76,6 +76,18 @@ func (c *Consumer) Down(){
 	c.mu.Unlock()
 }
 
+
+func (c *Consumer) SendInfo(port string, cli *server_operations.Client) error {
+
+	resp, err := (*cli).ConInfo(context.Background(), &api.InfoRequest{
+		IpPort: port,
+	})
+	if err != nil {
+		fmt.Println(resp)
+	}
+	return err
+}
+
 func (c *Consumer) SubScription(topic, partition string, option int8) (clis []*server_operations.Client, err error) {
 	//查询Zookeeper，找到broker
 	c.mu.RLock()

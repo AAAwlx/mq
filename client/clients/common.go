@@ -3,10 +3,11 @@ package clients
 import "net"
 
 //消息分区信息
-type PartKey struct{
-	name string `json:"name"`
+type PartKey struct {
+	Name        string `json:"name"`
+	Broker_name string `json:"brokername"`
+	Broker_H_P  string `json:"brokerhp"`
 }
-
 //Broker信息
 type BrokerInfo struct {
 	Name 		string `json:"name"`

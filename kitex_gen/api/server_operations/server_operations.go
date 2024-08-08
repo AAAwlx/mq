@@ -27,17 +27,10 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		false,
 		kitex.WithStreamingMode(kitex.StreamingNone),
 	),
-	"info": kitex.NewMethodInfo(
-		infoHandler,
-		newServer_OperationsInfoArgs,
-		newServer_OperationsInfoResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
-	"Sub": kitex.NewMethodInfo(
-		subHandler,
-		newServer_OperationsSubArgs,
-		newServer_OperationsSubResult,
+	"ConInfo": kitex.NewMethodInfo(
+		conInfoHandler,
+		newServer_OperationsConInfoArgs,
+		newServer_OperationsConInfoResult,
 		false,
 		kitex.WithStreamingMode(kitex.StreamingNone),
 	),
@@ -45,6 +38,20 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		starttoGetHandler,
 		newServer_OperationsStarttoGetArgs,
 		newServer_OperationsStarttoGetResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"PrepareAccept": kitex.NewMethodInfo(
+		prepareAcceptHandler,
+		newServer_OperationsPrepareAcceptArgs,
+		newServer_OperationsPrepareAcceptResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"PrepareSend": kitex.NewMethodInfo(
+		prepareSendHandler,
+		newServer_OperationsPrepareSendArgs,
+		newServer_OperationsPrepareSendResult,
 		false,
 		kitex.WithStreamingMode(kitex.StreamingNone),
 	),
@@ -150,40 +157,22 @@ func newServer_OperationsPullResult() interface{} {
 	return api.NewServer_OperationsPullResult()
 }
 
-func infoHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*api.Server_OperationsInfoArgs)
-	realResult := result.(*api.Server_OperationsInfoResult)
-	success, err := handler.(api.Server_Operations).Info(ctx, realArg.Req)
+func conInfoHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*api.Server_OperationsConInfoArgs)
+	realResult := result.(*api.Server_OperationsConInfoResult)
+	success, err := handler.(api.Server_Operations).ConInfo(ctx, realArg.Req)
 	if err != nil {
 		return err
 	}
 	realResult.Success = success
 	return nil
 }
-func newServer_OperationsInfoArgs() interface{} {
-	return api.NewServer_OperationsInfoArgs()
+func newServer_OperationsConInfoArgs() interface{} {
+	return api.NewServer_OperationsConInfoArgs()
 }
 
-func newServer_OperationsInfoResult() interface{} {
-	return api.NewServer_OperationsInfoResult()
-}
-
-func subHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*api.Server_OperationsSubArgs)
-	realResult := result.(*api.Server_OperationsSubResult)
-	success, err := handler.(api.Server_Operations).Sub(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newServer_OperationsSubArgs() interface{} {
-	return api.NewServer_OperationsSubArgs()
-}
-
-func newServer_OperationsSubResult() interface{} {
-	return api.NewServer_OperationsSubResult()
+func newServer_OperationsConInfoResult() interface{} {
+	return api.NewServer_OperationsConInfoResult()
 }
 
 func starttoGetHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
@@ -202,6 +191,42 @@ func newServer_OperationsStarttoGetArgs() interface{} {
 
 func newServer_OperationsStarttoGetResult() interface{} {
 	return api.NewServer_OperationsStarttoGetResult()
+}
+
+func prepareAcceptHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*api.Server_OperationsPrepareAcceptArgs)
+	realResult := result.(*api.Server_OperationsPrepareAcceptResult)
+	success, err := handler.(api.Server_Operations).PrepareAccept(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newServer_OperationsPrepareAcceptArgs() interface{} {
+	return api.NewServer_OperationsPrepareAcceptArgs()
+}
+
+func newServer_OperationsPrepareAcceptResult() interface{} {
+	return api.NewServer_OperationsPrepareAcceptResult()
+}
+
+func prepareSendHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*api.Server_OperationsPrepareSendArgs)
+	realResult := result.(*api.Server_OperationsPrepareSendResult)
+	success, err := handler.(api.Server_Operations).PrepareSend(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newServer_OperationsPrepareSendArgs() interface{} {
+	return api.NewServer_OperationsPrepareSendArgs()
+}
+
+func newServer_OperationsPrepareSendResult() interface{} {
+	return api.NewServer_OperationsPrepareSendResult()
 }
 
 type kClient struct {
@@ -234,21 +259,11 @@ func (p *kClient) Pull(ctx context.Context, req *api.PullRequest) (r *api.PullRe
 	return _result.GetSuccess(), nil
 }
 
-func (p *kClient) Info(ctx context.Context, req *api.InfoRequest) (r *api.InfoResponse, err error) {
-	var _args api.Server_OperationsInfoArgs
+func (p *kClient) ConInfo(ctx context.Context, req *api.InfoRequest) (r *api.InfoResponse, err error) {
+	var _args api.Server_OperationsConInfoArgs
 	_args.Req = req
-	var _result api.Server_OperationsInfoResult
-	if err = p.c.Call(ctx, "info", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
-func (p *kClient) Sub(ctx context.Context, req *api.SubRequest) (r *api.SubResponse, err error) {
-	var _args api.Server_OperationsSubArgs
-	_args.Req = req
-	var _result api.Server_OperationsSubResult
-	if err = p.c.Call(ctx, "Sub", &_args, &_result); err != nil {
+	var _result api.Server_OperationsConInfoResult
+	if err = p.c.Call(ctx, "ConInfo", &_args, &_result); err != nil {
 		return
 	}
 	return _result.GetSuccess(), nil
@@ -259,6 +274,26 @@ func (p *kClient) StarttoGet(ctx context.Context, req *api.InfoGetRequest) (r *a
 	_args.Req = req
 	var _result api.Server_OperationsStarttoGetResult
 	if err = p.c.Call(ctx, "StarttoGet", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) PrepareAccept(ctx context.Context, req *api.PrepareAcceptRequest) (r *api.PrepareAcceptResponse, err error) {
+	var _args api.Server_OperationsPrepareAcceptArgs
+	_args.Req = req
+	var _result api.Server_OperationsPrepareAcceptResult
+	if err = p.c.Call(ctx, "PrepareAccept", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) PrepareSend(ctx context.Context, req *api.PrepareSendRequest) (r *api.PrepareSendResponse, err error) {
+	var _args api.Server_OperationsPrepareSendArgs
+	_args.Req = req
+	var _result api.Server_OperationsPrepareSendResult
+	if err = p.c.Call(ctx, "PrepareSend", &_args, &_result); err != nil {
 		return
 	}
 	return _result.GetSuccess(), nil

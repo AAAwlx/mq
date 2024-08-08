@@ -43,6 +43,8 @@ sub and pub : SubScription中可以有多个消费者组，每个消费者组中
 
 理想状态：例如100个consumer和20个topic，那么每个topic分配5个consumer。
 
+点对点只有一个消费组
+
 ##### 不同组: 
 
 发布-订阅模式
