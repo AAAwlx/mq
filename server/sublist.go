@@ -3,7 +3,6 @@ package server
 import (
 	"mq/kitex_gen/api/client_operations"
 	"errors"
-	"fmt"
 	"hash/crc32"
 	"os"
 	"sort"
@@ -24,41 +23,118 @@ const (
 
 type Topic struct {
 	rmu     sync.RWMutex
+	Name 	string
 	Files   map[string]*File
 	Parts   map[string]*Partition
 	subList map[string]*SubScription
 }
 
-func NewTopic(req push) *Topic {
+func NewTopic(topic_name string) *Topic {
 	topic := &Topic{
 		rmu:     sync.RWMutex{},
+		Name: 	 topic_name,
 		Parts:   make(map[string]*Partition),
 		subList: make(map[string]*SubScription),
-		Files: make(map[string]*File),
+		Files:   make(map[string]*File),
 	}
 	str, _ := os.Getwd()
-	str += "/" + name + "/" + req.topic
-	CreateList(str)
-	part, file := NewPartition(req)
-	topic.Files[req.key] = file
-	topic.Parts[req.key] = part
+	str += "/" + name + "/" + topic_name
+	CreateList(str)   //若存在，则不会创建
 
 	return topic
 }
 
-func (t *Topic) GetFile(key string) *File {
+func (t *Topic) PrepareAcceptHandle(in info) (ret string, err error){
+	t.rmu.Lock()
+	partition, ok := t.Parts[in.part_name]
+	if !ok {
+		partition = NewPartition(t.Name, in.part_name)
+		t.Parts[in.part_name] = partition
+	}
+	
+	//设置partition中的file和fd，start_index等信息
+	str, _ := os.Getwd()
+	str += "/" + name + "/" + in.topic_name + "/" + in.part_name + "/" + in.file_name
+	file, fd := NewFile(str)
+	t.Files[str] = file
+	t.rmu.Unlock()
+	ret = partition.StartGetMessage(file, fd, in)
+	if ret == OK {
+		DEBUG(dLog, "topic(%v)_partition(%v) Start success\n", in.topic_name, in.part_name)
+	}else{
+		DEBUG(dLog, "topic(%v)_partition(%v) Had Started\n", in.topic_name, in.part_name)
+	}
+	return ret, nil
+}
+
+func (t *Topic) PrepareSendHandle(in info) (ret string, err error){
+	sub_name := GetStringfromSub(in.topic_name, in.part_name, in.option)
+
+	t.rmu.Lock()
+	//检查或创建partition
+	partition, ok := t.Parts[in.part_name]
+	if !ok {
+		partition = NewPartition(t.Name, in.part_name)
+		t.Parts[in.part_name] = partition
+	}
+
+	//检查文件是否存在
+	file, ok := t.Files[in.file_name]
+	if !ok {
+		str, _ := os.Getwd()
+		str += "/" + name + "/" + in.topic_name + "/" + in.part_name + "/" + in.file_name
+		file, fd := NewFile(str)
+		fd.Close()
+		t.Files[str] = file
+	}
+
+	//检查或创建sub
+	sub, ok := t.subList[sub_name]
+	if !ok {
+		var 
+		sub = NewSubScription(in, sub_name, t.Parts, t.Files)
+		t.subList[sub_name] = sub
+	}
+	//在sub中创建对应文件的config，来等待startget
+	t.rmu.Unlock()
+	return sub.AddPTPConfig(in, partition, file)
+}
+
+func (t *Topic) HandleStartToGet(sub_name string, in info, cli *client_operations.Client) (err error) {
+	t.rmu.RLock()
+	defer t.rmu.RUnlock()
+	sub, ok := t.subList[sub_name]
+	if !ok {
+		ret := "this topic not have this subscription"
+		DEBUG(dError, "%v\n", ret)
+		return errors.New(ret)
+	}
+	sub.AddConsumerInConfig(in, cli)
+	return nil
+}
+
+//not used
+func (t *Topic) HandleParttitions(Partitions map[string]ParNodeInfo) {
+	for part_name, _ := range Partitions {
+		_, ok := t.Parts[part_name]
+		if !ok {
+			part := NewPartition(t.Name, part_name)
+			// part.HandleBlocks(topic_name, part_name, partition.Blocks)
+
+			t.Parts[part_name] = part
+		}else{
+			DEBUG(dWarn, "This topic(%v) part(%v) had in s.topics\n", t.Name, part_name)
+		}
+	}
+}
+
+func (t *Topic) GetFile(filename string) *File {
 	t.rmu.RLock()
 	defer t.rmu.RUnlock()
 
-	return t.Parts[key].GetFile()
+	return t.Parts[filename].GetFile()
 }
 
-func (t *Topic) GetConfig(sub string) *Config {
-	t.rmu.RLock()
-	defer t.rmu.RUnlock()
-
-	return t.subList[sub].GetConfig()
-}
 
 func (t *Topic) GetParts() map[string]*Partition {
 	t.rmu.RLock()
@@ -67,17 +143,18 @@ func (t *Topic) GetParts() map[string]*Partition {
 	return t.Parts
 }
 
-func (t *Topic) AddPartition(req push) {
-	part, _ := NewPartition(req)
-	t.Parts[req.key] = part
+func (t *Topic) AddPartition(part_name string) {
+	part := NewPartition(t.Name, part_name)
+	t.Parts[part_name] = part
 }
 
-func (t *Topic) addMessage(req push) error {
-	part, ok := t.Parts[req.key]
+func (t *Topic) addMessage(in info) error {
+	part, ok := t.Parts[in.part_name]
 	if !ok {
-		part, file := NewPartition(req) // new a Parition //需要向sub中和config中加入一个partition
-		t.Files[req.key] = file
-		t.Parts[req.key] = part
+		DEBUG(dError, "not find this part in add message\n")
+		part := NewPartition(in.topic_name, in.part_name) // new a Parition //需要向sub中和config中加入一个partition
+		// t.Files[req.key] = file
+		t.Parts[in.part_name] = part
 	}
 	DEBUG(dLog, "add before lock in topic addmsg\n")
 	part.mu.Lock()
@@ -85,7 +162,7 @@ func (t *Topic) addMessage(req push) error {
 
 	part.mu.Unlock()
 
-	part.addMessage(req)
+	part.addMessage(in)
 
 	return nil
 }
@@ -105,33 +182,32 @@ func GetStringfromSub(top_name, part_name string, option int8) string {
 	return ret
 }
 
-//向主题中添加一个订阅信息
-func (t *Topic) AddSubScription(req sub) (retsub *SubScription, err error) {
-	ret := GetStringfromSub(req.topic, req.key, req.option)
+func (t *Topic) AddSubScription(in info) (retsub *SubScription, err error) {
+	ret := GetStringfromSub(in.topic_name, in.part_name, in.option)
 	t.rmu.RLock()
 	subscription, ok := t.subList[ret]
 	t.rmu.RUnlock()
 
-	if !ok {//主题中没有该订阅信息，则创建新的订阅
+	if !ok {
 		t.rmu.Lock()
-		subscription = NewSubScription(req, ret, t.Parts, t.Files)
+		subscription = NewSubScription(in, ret, t.Parts, t.Files)
 		t.subList[ret] = subscription
 		t.rmu.Unlock()
 	} else {
-		subscription.AddConsumerInGroup(req)//如果存在该订阅则将用户加入订阅中
+		subscription.AddConsumerInGroup(in)
 	}
 
 	return subscription, nil
 }
 
-func (t *Topic) ReduceSubScription(req sub) (string, error) {
-	ret := GetStringfromSub(req.topic, req.key, req.option)
+func (t *Topic) ReduceSubScription(in info) (string, error) {
+	ret := GetStringfromSub(in.topic_name, in.part_name, in.option)
 	t.rmu.Lock()
 	subscription, ok := t.subList[ret]
 	if !ok {
 		return ret, errors.New("this Topic do not have this SubScription")
 	} else {
-		subscription.ReduceConsumer(req)
+		subscription.ReduceConsumer(in)
 	}
 
 	t.rmu.Unlock()
@@ -146,39 +222,66 @@ func (t *Topic) Rebalance() {
 
 }
 
-type Partition struct {
-	mu        sync.RWMutex
-	file_name string
-	fd        *os.File
-	key       string
-	file      *File
+const (
+	START = "start"
+	CLOSE = "close"
+)
 
+type Partition struct {
+	mu        	sync.RWMutex
+	key       	string
+	state 		string
+
+	file_name 	string
+	file      	*File
+	fd        	*os.File
 	index       int64
 	start_index int64
 	queue       []Message
 }
 
-func NewPartition(req push) (*Partition, *File) {
+func NewPartition(topic_name, part_name string) (*Partition) {
 	part := &Partition{
 		mu:    sync.RWMutex{},
-		key:   req.key,
-		queue: make([]Message, 50),
+		state: CLOSE,
+		key:   part_name,
+		// queue: make([]Message, 50),
 	}
+	
 	str, _ := os.Getwd()
-	str += "/" + name + "/" + req.topic + "/" + req.key + ".txt"
-	file, err := CreateFile(str)
-	part.file = NewFile(str)
-	part.fd = file
-	part.file_name = str
-	part.index = part.file.GetIndex(file)
-	part.start_index = part.index + 1
-	if err != nil {
-		fmt.Println("create ", str, "failed")
-	}
-	part.addMessage(req)
+	str += "/" + name + "/" + topic_name + "/" + part_name
+	CreateList(str)  //若存在，则不会创建
 
-	return part, part.file
+	return part
 }
+
+func (p *Partition) StartGetMessage(file *File, fd *os.File, in info) string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	ret := ""
+	switch p.state {
+	case START:
+		ret = ErrHadStart
+	case CLOSE:
+		p.queue = make([]Message, 50)	
+
+		p.state = START
+		p.file = file
+		p.fd = fd
+		p.file_name = in.file_name
+		p.index = file.GetIndex(fd)
+		p.start_index = p.index+1
+		ret = OK
+	}
+	return ret
+}
+
+//检查是否存在path的文件，若不存在则错误，存在则创建一个File
+//若path和partition的name相同，有就创建一个File，没有就创建一个这个名字的文件
+// func (p *Partition) AddFile(path string) *File {
+
+// }
+
 
 func (p *Partition) GetFile() *File {
 	p.mu.RLock()
@@ -187,14 +290,16 @@ func (p *Partition) GetFile() *File {
 	return p.file
 }
 
-func (p *Partition) addMessage(req push) {
+//检查state
+//当接收数据达到一定数量将修改zookeeper上的index
+func (p *Partition) addMessage(in info) {
 	p.mu.Lock()
 	p.index++
 	msg := Message{
 		Index:      p.index,
-		Topic_name: req.topic,
-		Part_name:  req.key,
-		Msg:        []byte(req.message),
+		Topic_name: in.topic_name,
+		Part_name:  in.part_name,
+		Msg:        []byte(in.message),
 	}
 	DEBUG(dLog, "part_name %v add message index is %v\n", p.key, p.index)
 	p.queue = append(p.queue, msg)
@@ -231,31 +336,49 @@ type SubScription struct {
 	partitions map[string]*Partition
 	Files      map[string]*File
 
-	config *Config
+	//需要修改，一个订阅需要多个config，因为一个partition有多个文件，一个文件需要一个config
+	//需要修改，分为多种订阅，每种订阅方式一种config
+	PTP_config *Config    //以
 }
 
-func NewSubScription(req sub, name string, parts map[string]*Partition, files map[string]*File) *SubScription {
+func NewSubScription(in info, name string, parts map[string]*Partition, files map[string]*File) *SubScription {
 	sub := &SubScription{
 		rmu:        sync.RWMutex{},
 		name:       name,
-		topic_name: req.topic,
-		option:     req.option,
+		topic_name: in.topic_name,
+		option:     in.option,
 		partitions: parts,
 		Files:      files,
+		PTP_config: nil,
 	}
 
-	group := NewGroup(req.topic, req.consumer)
+	group := NewGroup(in.part_name, in.consumer)
 	sub.groups = append(sub.groups, group)
-	sub.config = NewConfig(req.topic, len(parts), sub.partitions, sub.Files)
+	// sub.config = NewConfig(req.topic, len(parts), sub.partitions, sub.Files)
 
 	return sub
 }
 
-func (s *SubScription) GetConfig() *Config {
+//当有消费者需要开始消费时，PTP
+//若sub中该文件的config存在，则加入该config
+//若sub中该文件的config不存在，则创建一个config，并加入
+func (s *SubScription) AddPTPConfig(in info, partition *Partition, file *File) (ret string, err error) {
+	if s.PTP_config == nil {
+		s.PTP_config = NewConfig(in.topic_name, 0, nil, nil)
+	}
+
+	err = s.PTP_config.AddPartition(in, partition, file)
+	if err != nil {
+		return ret, err
+	}
+	return ret, nil
+}
+
+func (s *SubScription) GetPTPConfig(path_name string) *Config {
 	s.rmu.RLock()
 	defer s.rmu.RUnlock()
 
-	return s.config
+	return s.PTP_config
 }
 
 //考虑是否需要将config中的Client也关闭，
@@ -276,66 +399,66 @@ func (s *SubScription) ShutdownConsumerInGroup(cli_name string) string {
 	return s.topic_name
 }
 
-func (s *SubScription) RecoverConsumer(req sub) { //未使用
+func (s *SubScription) RecoverConsumer(in info) { //未使用
 
 	s.rmu.Lock()
 	defer s.rmu.Unlock()
 
-	switch req.option {
+	switch in.option {
 	case TOPIC_NIL_PTP:
-		s.groups[0].RecoverClient(req.consumer)
+		s.groups[0].RecoverClient(in.consumer)
 	case TOPIC_KEY_PSB:
-		group := NewGroup(req.topic, req.consumer)
+		group := NewGroup(in.topic_name, in.consumer)
 		s.groups = append(s.groups, group)
 	}
 }
 
 //将group中添加consumer
-func (s *SubScription) AddConsumerInGroup(req sub) {
+func (s *SubScription) AddConsumerInGroup(in info) {
 
 	s.rmu.Lock()
 	defer s.rmu.Unlock()
 
-	switch req.option {
+	switch in.option {
 	case TOPIC_NIL_PTP:
-		s.groups[0].AddClient(req.consumer)
+		s.groups[0].AddClient(in.consumer)
 
 	case TOPIC_KEY_PSB:
-		group := NewGroup(req.topic, req.consumer)
+		group := NewGroup(in.topic_name, in.consumer)
 		s.groups = append(s.groups, group)
 	}
 }
 
-//将config中添加consumer   当consumer StartGet是才调用
-func (s *SubScription) AddConsumerInConfig(req startget, cli *client_operations.Client) {
+//将config中添加consumer   当consumer StartGet时才调用
+func (s *SubScription) AddConsumerInConfig(in info, cli *client_operations.Client) {
 
 	s.rmu.Lock()
 	defer s.rmu.Unlock()
 
-	switch req.option {
+	switch in.option {
 	case TOPIC_NIL_PTP:
 
-		s.config.AddCli(req.part_name, req.cli_name, cli) //向config中ADD consumer
+		s.PTP_config.AddCli(in.part_name, in.consumer, cli) //向config中ADD consumer
 	case TOPIC_KEY_PSB:
-		group := NewGroup(req.topic_name, req.cli_name)
+		group := NewGroup(in.topic_name, in.consumer)
 		s.groups = append(s.groups, group)
 	}
 }
 
 //group和Config中都需要减少  当有consumer取消订阅时调用
-func (s *SubScription) ReduceConsumer(req sub) {
+func (s *SubScription) ReduceConsumer(in info) {
 
 	s.rmu.Lock()
 	defer s.rmu.Unlock()
 
 	switch s.option {
 	case TOPIC_NIL_PTP:
-		s.groups[0].DeleteClient(req.consumer)
+		s.groups[0].DeleteClient(in.consumer)
 
-		s.config.DeleteCli(req.key, req.consumer) //delete config 中的 consumer
+		s.PTP_config.DeleteCli(in.part_name, in.consumer) //delete config 中的 consumer
 	case TOPIC_KEY_PSB:
 		for _, group := range s.groups {
-			group.DeleteClient(req.consumer)
+			group.DeleteClient(in.consumer)
 		}
 	}
 
@@ -346,7 +469,9 @@ type Config struct {
 
 	part_num int //partition数
 	cons_num int //consumer 数
-	node_con bool
+	node_con bool //node 为 consumer
+
+	part_close chan Part
 
 	PartToCon map[string][]string
 
@@ -367,6 +492,8 @@ func NewConfig(topic_name string, part_num int, partitions map[string]*Partition
 		cons_num: 0,
 		node_con: true,
 
+		part_close: make(chan Part),
+
 		PartToCon:  make(map[string][]string),
 		Files:      files,
 		Partitions: partitions,
@@ -376,11 +503,15 @@ func NewConfig(topic_name string, part_num int, partitions map[string]*Partition
 		// consistent2: NewConsistent(),
 	}
 
-	for partition_name := range partitions {
-		con.parts[partition_name] = NewPart(topic_name, partition_name, files[partition_name])
-	}
+	go con.GetCloseChan()
 
 	return con
+}
+
+func (c *Config) GetCloseChan() {
+	for close := range c.part_close {
+		c.DeletePartition(close.part_name, close.file)
+	}
 }
 
 //向Clis加入此consumer的句柄，重新负载均衡，并修改Parts中的clis数组
@@ -400,10 +531,10 @@ func (c *Config) AddCli(part_name string, cli_name string, cli *client_operation
 
 	if c.node_con { //consumer is node
 		err := c.consistent.Add(cli_name)
-		DEBUG(dError, err.Error())
+		if err != nil {
+			DEBUG(dError, err.Error())
+		}
 	}
-	//else			//partition is node
-
 	c.mu.Unlock()
 
 	c.RebalancePtoC() //更新配置
@@ -414,15 +545,15 @@ func (c *Config) AddCli(part_name string, cli_name string, cli *client_operation
 func (c *Config) DeleteCli(part_name string, cli_name string) {
 	c.mu.Lock()
 
-	if c.cons_num-1 <= c.part_num && !c.node_con {
+	c.cons_num--
+	delete(c.Clis, cli_name)
+
+	if c.cons_num <= c.part_num && !c.node_con {
 		c.node_con = true
 
 		// node from partition to consumer
-		c.consistent = TurnConsistent(GetClisArray(c.Clis))
+		c.consistent = TurnConsistent(GetConsumerArray(c.Clis))
 	}
-
-	c.cons_num--
-	delete(c.Clis, cli_name)
 
 	if c.node_con { //consumer is node
 		err := c.consistent.Reduce(cli_name)
@@ -442,12 +573,55 @@ func (c *Config) DeleteCli(part_name string, cli_name string) {
 	}
 }
 
-func (c *Config) AddPartition() {
+func (c *Config) AddPartition(in info, partition *Partition, file *File) error {
+	c.mu.Lock()
 
+	if c.cons_num < c.part_num + 1 && !c.node_con {
+		c.node_con = true
+
+		//node from partition to consumer
+		c.consistent = TurnConsistent(GetConsumerArray(c.Clis))
+	}
+
+	c.part_num++
+	c.Partitions[in.part_name] = partition
+	c.Files[file.filename] = file
+
+	if !c.node_con {
+		err := c.consistent.Add(in.part_name)
+		if err != nil {
+			DEBUG(dError, err.Error())
+			return err
+		}
+	}
+	c.parts[in.part_name] = NewPart(in, file)
+	c.parts[in.part_name].Start(c.part_close)
+	c.mu.Unlock()
+
+	c.RebalancePtoC() //更新配置
+	c.UpdateParts()	//应用配置
+	return nil
 }
 
-func (c *Config) DeletePartition() {
+//part消费完成，移除config中的Partition和Part
+func (c *Config) DeletePartition(part_name string, file *File) {
+	c.mu.Lock()
 
+	c.part_num--
+	delete(c.Partitions, part_name)
+	delete(c.Files, file.filename)
+
+	if c.cons_num > c.part_num && c.node_con {
+		c.node_con = false
+
+		c.consistent = TurnConsistent(GetPartitionArray(c.Partitions))
+	}
+
+	//该Part协程已经关闭，该partition的文件已经消费完毕，
+	c.mu.Unlock()
+
+	c.RebalancePtoC()  //更新配置
+	c.UpdateParts()		//应用配置
 }
 
 //负载均衡，将调整后的配置存入PartToCon
@@ -521,6 +695,16 @@ func GetPartitionArray(partitions map[string]*Partition) []string {
 	var array []string
 
 	for key := range partitions {
+		array = append(array, key)
+	}
+
+	return array
+}
+
+func GetConsumerArray(consumers map[string]*client_operations.Client) []string {
+	var array []string
+
+	for key := range consumers {
 		array = append(array, key)
 	}
 

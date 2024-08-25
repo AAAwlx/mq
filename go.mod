@@ -2,10 +2,8 @@ module mq
 
 go 1.22.3
 
-replace github.com/apache/thrift => github.com/apache/thrift v0.13.0
-
 require (
-	github.com/apache/thrift v0.13.0
+	github.com/apache/thrift v0.20.0
 	github.com/cloudwego/kitex v0.10.3
 	github.com/go-zookeeper/zk v1.0.4
 )
