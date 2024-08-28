@@ -1,7 +1,7 @@
 package server
 
 import (
-	"mq/kitex_gen/api/client_operations"
+	"ClyMQ/kitex_gen/api/client_operations"
 	"net"
 	"os"
 	"runtime"
@@ -56,7 +56,6 @@ const (
 	BROKER 		=	"broker"
 )
 
-
 func GetIpport() string {
 	interfaces, err := net.Interfaces()
 	ipport := ""
@@ -76,6 +75,11 @@ func CheckFileOrList(path string) (ret bool) {
 		return os.IsExist(err)
 	}
 	return true
+}
+
+
+func MovName(path, new_name string) error {
+
 }
 
 func CreateList(path string) error {
@@ -99,15 +103,15 @@ func CreateFile(path string) (file *os.File, err error) {
 	return file, err
 }
 
-func GetClisArray(clis map[string]*client_operations.Client) []string {
-	var array []string
+// func GetClisArray(clis map[string]*client_operations.Client) []string {
+// 	var array []string
 
-	for cli_name := range clis {
-		array = append(array, cli_name)
-	}
+// 	for cli_name := range clis {
+// 		array = append(array, cli_name)
+// 	}
 
-	return array
-}
+// 	return array
+// }
 
 func GetPartKeyArray(parts map[string]*Partition) []PartKey {
 	var array []PartKey

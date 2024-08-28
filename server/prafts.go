@@ -1,9 +1,9 @@
 package server
 
 import (
-	"mq/kitex_gen/api"
-	"mq/kitex_gen/api/raft_operations"
-	"mq/raft"
+	"ClyMQ/kitex_gen/api"
+	"ClyMQ/kitex_gen/api/raft_operations"
+	"ClyMQ/raft"
 	"context"
 	"encoding/json"
 	"net"

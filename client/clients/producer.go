@@ -1,9 +1,9 @@
 package clients
 
 import (
-	"mq/kitex_gen/api"
-	"mq/kitex_gen/api/server_operations"
-	"mq/kitex_gen/api/zkserver_operations"
+	"ClyMQ/kitex_gen/api"
+	"ClyMQ/kitex_gen/api/server_operations"
+	"ClyMQ/kitex_gen/api/zkserver_operations"
 	"context"
 	"errors"
 	"sync"

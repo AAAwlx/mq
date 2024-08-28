@@ -1,8 +1,8 @@
 package server
 
 import (
-	"mq/kitex_gen/api"
-	"mq/kitex_gen/api/client_operations"
+	"ClyMQ/kitex_gen/api"
+	"ClyMQ/kitex_gen/api/client_operations"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,6 +14,8 @@ import (
 const (
 	ALIVE = "alive"
 	DOWN  = "down"
+	TIMEOUT = 60*10   //10分钟
+	UPDATANUM = 10
 )
 
 type Client struct {
@@ -26,7 +28,6 @@ type Client struct {
 	subList map[string]*SubScription // 若这个consumer关闭则遍历这些订阅并修改
 }
 
-//创建一个客户端
 func NewClient(ipport string, con client_operations.Client) *Client {
 	client := &Client{
 		mu:       sync.RWMutex{},
@@ -55,7 +56,6 @@ func (c *Client) CheckConsumer() bool { //心跳检测
 	return true
 }
 
-//
 func (c *Client) CheckSubscription(sub_name string) bool {
 	c.mu.RLock()
 	_, ok := c.subList[sub_name]
@@ -64,7 +64,6 @@ func (c *Client) CheckSubscription(sub_name string) bool {
 	return ok
 }
 
-//向消费者添加订阅信息
 func (c *Client) AddSubScription(sub *SubScription) {
 	c.mu.Lock()
 	c.subList[sub.name] = sub
@@ -98,7 +97,6 @@ func (c *Client) GetSub(sub_name string) *SubScription {
 	return c.subList[sub_name]
 }
 
-//消息分区
 type Part struct {
 	mu         sync.RWMutex
 	topic_name string
@@ -125,7 +123,7 @@ type Part struct {
 
 const (
 	OK      = "ok"
-	TIMEOUT = "timeout"
+	TIOUT = "timeout"
 
 	NOTDO  = "notdo"
 	HAVEDO = "havedo"
@@ -143,12 +141,12 @@ type Done struct {
 	// add a consumer name for start to send
 }
 
-func NewPart(topic_name, part_name string, file *File) *Part {
+func NewPart(in info, file *File) *Part {
 
 	part := &Part{
 		mu:         sync.RWMutex{},
-		topic_name: topic_name,
-		part_name:  part_name,
+		topic_name: in.topic_name,
+		part_name:  in.part_name,
 		option:     TOPIC_NIL_PTP,
 
 		buffer_node: make(map[int64]Key),
@@ -161,12 +159,12 @@ func NewPart(topic_name, part_name string, file *File) *Part {
 		buf_done: make(map[int64]string),
 	}
 
-	part.index = 0
+	part.index = in.offset
 
 	return part
 }
 
-func (p *Part) Start() {
+func (p *Part) Start(close chan Part) {
 
 	// open file
 	p.fd = *p.file.OpenFile()
@@ -185,7 +183,7 @@ func (p *Part) Start() {
 		}
 	}
 
-	go p.GetDone()
+	go p.GetDone(close)
 
 	p.mu.Lock()
 	if p.state == DOWN {
@@ -203,12 +201,6 @@ func (p *Part) Start() {
 
 }
 
-func (p *Part) ClosePart() {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	p.state = DOWN
-}
 
 func (p *Part) UpdateClis(cli_names []string, Clis map[string]*client_operations.Client) {
 	p.mu.Lock()
@@ -249,44 +241,69 @@ func (p *Part) AddBlock() error {
 	return err
 }
 
-func (p *Part) GetDone() {
+//需要修改，设置未可主动关闭模式，使用管道
+func (p *Part) GetDone(close chan Part) {
 
-	for do := range p.part_had {
-		if do.err == OK { // 发送成功，buf_do--, buf_done++, 补充buf_do
+	num := 0   //计数，如果达到UPDATANUM则更新zookeeper中的offset
+	for {
+		select {
+		case do := <-p.part_had:
 
-			err := p.AddBlock()
+			if do.err == OK { // 发送成功，buf_do--, buf_done++, 补充buf_do
 
-			p.mu.Lock()
-			if err != nil {
-				DEBUG(dError, err.Error())
-			}
+				num++
+				if num >= UPDATANUM {
 
-			p.buf_done[do.in] = HADDO
-			in := p.start_index
-
-			for {
-				if p.buf_done[in] == HADDO {
-					p.start_index = p.buffer_node[in].End_index + 1
-					delete(p.buf_done, in)
-					delete(p.buffer_msg, in)
-					delete(p.buffer_node, in)
-					in = p.start_index
-				} else {
-					break
 				}
+
+				err := p.AddBlock()
+				p.mu.Lock()
+				if err != nil {
+					DEBUG(dError, err.Error())
+				}
+
+				//文件消费完成，且文件不是生产者正在写入的文件
+				if p.file.filename != p.part_name + "NowBlock.txt" && err == errors.New("read All file, do not find this index"){
+					p.state = DOWN
+				}
+				//且缓存中的文件页被消费完后，发送信息到config，关闭该Part；
+				if p.state == DOWN && len(p.buf_done) == 0 {
+					p.mu.Unlock()
+					close <- *p
+					return
+				}
+
+				p.buf_done[do.in] = HADDO
+				in := p.start_index
+
+				for {
+					if p.buf_done[in] == HADDO {
+						p.start_index = p.buffer_node[in].End_index + 1
+						delete(p.buf_done, in)
+						delete(p.buffer_msg, in)
+						delete(p.buffer_node, in)
+						in = p.start_index
+					} else {
+						break
+					}
+				}
+
+				go p.SendOneBlock(do.name, do.cli)
+
+				p.mu.Unlock()
+
+			}
+			if do.err == TIOUT { //超时  已尝试发送3次
+				//认为该消费者掉线
+				p.mu.Lock()
+				delete(p.clis, do.name) //删除该消费者    考虑是否需要
+				//判断是否有消费者存在，若无则关闭协程和文件描述符
+				p.mu.Unlock()
 			}
 
-			go p.SendOneBlock(do.name, do.cli)
-
-			p.mu.Unlock()
-
-		}
-		if do.err == TIMEOUT { //超时  已尝试发送3次
-			//认为该消费者掉线
-			p.mu.Lock()
-			delete(p.clis, do.name) //删除该消费者    考虑是否需要
-			//判断是否有消费者存在，若无则关闭协程和文件描述符
-			p.mu.Unlock()
+		case <- time.After(TIMEOUT * time.Second):  //超时
+			close <- *p
+			return
 		}
 
 	}
@@ -306,6 +323,10 @@ func (p *Part) SendOneBlock(name string, cli *client_operations.Client) {
 		if _, ok := p.clis[name]; !ok { //不存在，不再负责这个分片
 			p.mu.Unlock()
 			return
+		}
+
+		if int(in) >= len(p.buf_done) {
+			in = 0
 		}
 
 		if p.buf_done[in] == NOTDO {
@@ -330,7 +351,7 @@ func (p *Part) SendOneBlock(name string, cli *client_operations.Client) {
 					if num >= AGAIN_NUM { //超时三次，将不再向其发送
 						p.part_had <- Done{
 							in:   node.Start_index,
-							err:  TIMEOUT,
+							err:  TIOUT,
 							name: name,
 							cli:  cli,
 						}

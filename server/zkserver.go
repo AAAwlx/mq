@@ -1,10 +1,10 @@
 package server
 
 import (
-	"mq/client/clients"
-	"mq/kitex_gen/api"
-	"mq/kitex_gen/api/server_operations"
-	"mq/zookeeper"
+	"ClyMQ/client/clients"
+	"ClyMQ/kitex_gen/api"
+	"ClyMQ/kitex_gen/api/server_operations"
+	"ClyMQ/zookeeper"
 	"context"
 	"encoding/json"
 	"sync"
@@ -146,12 +146,14 @@ func (z *ZkServer)CreateNowBlock(info Info_in) error {
 	return z.zk.RegisterNode(brock_node)
 }
 
-func (z *ZkServer)SubHandle(req sub) error {
+func (z *ZkServer)SubHandle(info Info_in) error {
 	//在zookeeper上创建sub节点，若节点已经存在，则加入group中
 
 	return nil
 }
 
+//consumer查询该向那些broker发送请求
+//zkserver让broker准备好topic/sub和config
 func (z *ZkServer)HandStartGetBroker(info Info_in) (rets []byte, size int, err error) {
 	var partkeys []clients.PartKey
 	var Parts 	 []zookeeper.Part
@@ -222,3 +224,8 @@ func (z *ZkServer)HandStartGetBroker(info Info_in) (rets []byte, size int, err e
 	return data, len(partkeys), nil
 }
 
+//发送请求到broker，关闭该broker上的partition的接收程序
+//并修改NowBlock的文件名，并修改zookeeper上的block信息
+func (z *ZkServer)CloseAcceptPartition() {
+
+}

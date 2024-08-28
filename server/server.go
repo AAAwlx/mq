@@ -1,10 +1,10 @@
 package server
 
 import (
-	"mq/kitex_gen/api"
-	"mq/kitex_gen/api/client_operations"
-	"mq/kitex_gen/api/zkserver_operations"
-	"mq/zookeeper"
+	"ClyMQ/kitex_gen/api"
+	"ClyMQ/kitex_gen/api/client_operations"
+	"ClyMQ/kitex_gen/api/zkserver_operations"
+	"ClyMQ/zookeeper"
 	"context"
 	"encoding/json"
 	"errors"

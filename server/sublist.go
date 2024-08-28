@@ -1,7 +1,7 @@
 package server
 
 import (
-	"mq/kitex_gen/api/client_operations"
+	"ClyMQ/kitex_gen/api/client_operations"
 	"errors"
 	"hash/crc32"
 	"os"

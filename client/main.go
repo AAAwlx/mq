@@ -1,7 +1,7 @@
 package main
 
 import (
-	"mq/client/clients"
+	"ClyMQ/client/clients"
 	"fmt"
 	"os"
 
@@ -41,17 +41,16 @@ func main() {
 
 	case "c":	
 		consumer,_ := clients.NewConsumer("0.0.0.0:2181", "consumer1", port)
-		//启动心跳检测与发布
-		go consumer.Start_server(":"+port)
+		//start a server for pub and pinpong
+		go consumer.Start_server()
 
-		clis, _ := consumer.SubScription("phone_number", "yclchuxue", 2)
+		consumer.SubScription("phone_number", "yclchuxue", 2)
 
 		consumer.StartGet(clients.Info{
 			Offset: 0,
 			Topic: "phone_number",
 			Part: "yclchuxue",
 			Option: 2,
-			Cli: *clis[0],
 		})
 	}
 

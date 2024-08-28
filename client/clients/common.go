@@ -2,19 +2,18 @@ package clients
 
 import "net"
 
-//消息分区信息
 type PartKey struct {
 	Name        string `json:"name"`
 	Broker_name string `json:"brokername"`
 	Broker_H_P  string `json:"brokerhp"`
 }
-//Broker信息
+
 type BrokerInfo struct {
-	Name 		string `json:"name"`
-	Host_port 	string `json:"hsotport"`
+	Name      string `json:"name"`
+	Host_port string `json:"hsotport"`
 }
-//函数获取本机所有网络接口的 MAC 地址
-func GetIpport() string{
+
+func GetIpport() string {
 	interfaces, err := net.Interfaces()
 	ipport := ""
 	if err != nil {

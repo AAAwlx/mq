@@ -1,7 +1,7 @@
 package main
 
 import (
-	Server "mq/server"
+	Server "ClyMQ/server"
 	"fmt"
 	"net"
 
@@ -10,10 +10,11 @@ import (
 
 func main() {
 
-	addr,_ := net.ResolveTCPAddr("tcp", ":8888")//获取ip
+	//start the broker server
+	addr,_ := net.ResolveTCPAddr("tcp", ":8888")
 	var opts []server.Option
 	opts = append(opts, server.WithServiceAddr(addr))
-	rpcServer := new(Server.RPCServer)//启动一个Broker实例
+	rpcServer := new(Server.RPCServer)
 	
 	err := rpcServer.Start(opts)
 	if err != nil {

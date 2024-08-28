@@ -1,35 +1,91 @@
+## Zookeeper
 
-## 基础架构
+Zookeeper中将保存着每个Broker的信息，和Topic-Partition的信息，如图：
 
-网络库 + 消息队列 + 数据持久化 + Zookeeper
+## Producer
 
-### 消息队列
+生产者通过Topic和Partition的name查询Zookeeper获得需要将信息发送到那个broker，通过Push操作将信息发送到broker，信息的内容包括Topic和Partition的name;
 
-- 生产者生产消息 
+生产者需要将连接Zookeeper查询到的信息进行储存，如果再次有该Topic—Partition的信息就不需要再次查询；
 
-- 消费者消费信息（消费信息后不会被删除，后期可提供日志监测功能）
+若生产者发送的信息的Topic-Partition不存在，我们则认为生产者需要创建一个新的Topic或者Partition，Zookeeper会通过负载均衡将该Topic-Partition分给一Broker,Broker收到一个自己不曾有的Topic和Partition时，就会创建一个。
 
-- 消息队列持久化
+Partition并不能无限创建，我们设置一个默认限制：10个；超出这个限制则会创建失败；
 
-- 分片管理消息队列，支持分布式
+## Consumer
 
-- 通过Zookeeper管理分片
+消费者连接到Zookeeper查询需要信息的Topic-Partition，并连接到该Broker; 
 
-- 由 Producer 向 broker push 消息并由 Consumer 从 broker pull 消息。
+* 当是PTP的情况下，zookeeper上只保存了每个Topic的所在的broker，这个broker可以是多个，consumer需要连接到这些broker上去；
 
-#### Broker
-单个消息队列服务器，支持水平扩展。
+*  当是PSB的情况，zookeeper保存的是每个Partition所在的broker，这个broker只有一个，consumer去连接这个broker去消费；
 
-#### Topic
-每个broker拥有多个topic，topic是一个queue, topic是不同消息分类，即不同消费者所关心的事件。
+### 订阅 TOPIC_NIL_PTP
 
-#### Partition
-为了提高吞吐率，将topic分成一个或多个Partition，类似于kv存储中按k进行分片管理，将不同分片放到不同集群。
+#### Sub 订阅
 
-### 网络库
-通过网络库进行进程间通讯（可以考虑使用RPC），后期争取将自己的网络库可以支持ymq。
+订阅一个点对点的情况时，查看是否存在该订阅，如果存在该订阅，则将
 
-## 数据持久化
-每个Partition创建一个文件，采取顺序读写的方式提高性能。
+#### Start 开始消费
 
-![图 0](../images/0485b97e7f3f5deb643b98b72b305fe07cfa1facb150585ba8b5c4c41c2123e8.png)  
+```
+type Part struct {
+	mu         sync.RWMutex
+	topic_name string
+	part_name  string
+	option     int8
+	clis       map[string]*client_operations.Client
+
+	state string
+	fd    os.File
+	file  *File
+
+	index  int64 //use index to find offset
+	offset int64
+
+	start_index int64
+	end_index   int64
+
+	buffer_node map[int64]Key
+	buffer_msg  map[int64][]Message
+
+	part_had chan Done
+	buf_done map[int64]string
+}
+```
+
+partition ：consumer = n : 1        //消费者少于分片数
+
+* 
+
+partition : consumer = 1 : 1        //消费者等于分片数
+
+* 
+
+partition : consumer = 1 : n        //消费者多于分片数
+
+* 
+
+### 订阅 TOPIC_KEY_PSB
+
+#### Sub 订阅
+
+订阅一个PSB的情况时，查看是否存在该订阅，如果存在该订阅，则将
+
+#### Start 开始消费
+
+
+
+### 首次连接
+
+创建一个客户端，设置它的状态state；并维护一个Pingong心跳；
+
+### 断开连接
+
+通过PingPong检测到该客户端失去联系后，则修改客户端状态，其他发送协程检查此选项后关闭；
+
+通过Sub发送信息超时后，将该协程加入超时对列，若重发后任超时则加入死信队列；（此状态可以在消费者并未断开的情况，可用于消费者战时不想处理该信息，我们可以将发送这个Topic—Partition的协程战时关闭，等待消费者通知后再从死信队列取出并开启协程发送）
+
+### 再次连接
+
+在订阅Topic-Partition后会将订阅的内容存下来，当恢复连接时将重新请求Zookeeper并连接Broker；
